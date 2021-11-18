@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:trac2move/persistant/PostgresConnector.dart';
+import 'package:trac2move/persistent/PostgresConnector.dart';
 import 'package:trac2move/screens/Overlay.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:trac2move/ble/ble_device_connector.dart';
@@ -70,7 +70,7 @@ class BluetoothManager {
     print("scanning for devices");
     Completer completer = new Completer();
     StreamSubscription<DiscoveredDevice> deviceSubscription;
-    deviceSubscription = _ble.scanForDevices(withServices: [
+    deviceSubscription = _ble.scanForDevices(withServices: [ISSC_PROPRIETARY_SERVICE_UUID
     ], scanMode: ScanMode.balanced).timeout(Duration(seconds: 30),
         onTimeout: (timeOut) async {
       await deviceSubscription.cancel();
@@ -402,7 +402,7 @@ class BluetoothManager {
   }
 
   Future<dynamic> _startUpload() async {
-    final port = IsolateNameServer.lookupPortByName('main');
+    final port = IsolateNameServer.lookupPortByName('worker');
     Completer completer = new Completer();
     int maxtrys = 1;
     _downloadedFiles = [];
@@ -705,7 +705,7 @@ Future<dynamic> getStepsAndMinutes() async {
 Future<dynamic> stopRecordingAndUpload() async {
   Completer completer = new Completer();
   BluetoothManager manager = new BluetoothManager();
-  final port = IsolateNameServer.lookupPortByName('main');
+  final port = IsolateNameServer.lookupPortByName('worker');
   await manager._asyncInit();
   manager.hour = manager.prefs.getInt("recordingWillStartAt");
   await manager._checkIfBLAndLocationIsActive().then((value) {
@@ -759,21 +759,6 @@ Future<dynamic> stopRecordingAndUpload() async {
           print('port is null');
         }
       }
-      // else {
-      //   await Future.delayed(Duration(minutes: 4));
-      //   for (int i=0; i<5;i++) {
-      //     await manager._connect().then((value) {
-      //       if (!value && i==5) {
-      //         if (port != null) {
-      //           completer.complete(manager);
-      //           port.send('cantConnect');
-      //         } else {
-      //           print('port is null');
-      //         }
-      //       }
-      //     });
-      //   }
-      // }
     }
   })..onError((error) { // Cascade
     print("Error");
@@ -800,10 +785,10 @@ Future<dynamic> stopRecordingAndUpload() async {
   });
   await Future.delayed(Duration(seconds: 1));
   await manager.stpUp(12.5, 8, manager.hour);
-  await Future.delayed(Duration(seconds: 2));
+  await Future.delayed(Duration(seconds: 1));
   await manager.prefs.setBool("uploadInProgress", false);
   await manager._disconnect();
-  await Future.delayed(Duration(seconds: 2));
+  await Future.delayed(Duration(seconds: 1));
   await setLastUploadedFileNumber(-1);
   await manager.pg_connector.saveStepsandMinutes();
   await Future.delayed(Duration(seconds: 1));

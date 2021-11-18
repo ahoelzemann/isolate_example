@@ -2,11 +2,13 @@ import 'dart:isolate';
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/cupertino.dart';
+
+// import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:need_resume/need_resume.dart';
 import 'dart:ui';
 import 'package:day_night_time_picker/day_night_time_picker.dart';
-import 'package:trac2move/persistant/Participant.dart';
+import 'package:trac2move/persistent/Participant.dart';
 import 'package:trac2move/screens/Configuration.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
@@ -16,12 +18,10 @@ import 'package:trac2move/screens/Contact.dart';
 import 'package:evil_icons_flutter/evil_icons_flutter.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:trac2move/screens/Overlay.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:trac2move/util/Logger.dart';
 import 'package:trac2move/screens/FAQ.dart';
-
 import 'package:trac2move/bct/BCT.dart' as BCT;
 import 'package:trac2move/screens/Charts.dart';
 import 'package:flutter_isolate/flutter_isolate.dart';
@@ -33,7 +33,42 @@ class LandingScreen extends StatefulWidget {
   _LandingScreenState createState() => _LandingScreenState();
 }
 
-void isolate1(String arg) async {
+void mainIsolate(String arg) async {
+  final receivePort = ReceivePort();
+  int runs = 0;
+  FlutterIsolate flutterWorkerIsolate = await FlutterIsolate.spawn(workerIsolate, "");
+  final sendPort = receivePort.sendPort;
+  final port = IsolateNameServer.lookupPortByName('main');
+  IsolateNameServer.registerPortWithName(sendPort, 'worker');
+  receivePort.listen((dynamic message) async {
+    if (message == 'connectionClosed') {
+      print(
+          "BLE Connection closed - Killing the Isolate and spawning a new one.");
+      flutterWorkerIsolate.kill();
+      runs++;
+
+      if (runs <= 5) {
+        await Future.delayed(Duration(minutes: 1));
+        flutterWorkerIsolate = await FlutterIsolate.spawn(workerIsolate, "");
+      } else {
+        if (port != null) {
+          port.send(message);
+        } else {
+          debugPrint('port is null');
+        }
+      }
+    } else {
+      flutterWorkerIsolate.kill();
+      if (port != null) {
+        port.send(message);
+      } else {
+        debugPrint('port is null');
+      }
+    }
+  });
+}
+
+void workerIsolate(String arg) async {
   await BTExperimental.stopRecordingAndUpload();
 }
 
@@ -91,7 +126,7 @@ class _LandingScreenState extends ResumableState<LandingScreen> {
       AwesomeNotifications().actionStream.listen((receivedNotification) {
         Navigator.of(context).pushNamed('/NotificationPage', arguments: {
           receivedNotification.id
-        } 
+        } // your page params. I recommend to you to pass all *receivedNotification* object
             );
       });
     } catch (e) {
@@ -203,6 +238,7 @@ class _LandingScreenState extends ResumableState<LandingScreen> {
     } else {
       uploadSuccessful = prefs.getBool("uploadSuccessful");
     }
+    // uploadSuccessful = false;
     DateTime lastTime =
         DateTime.parse(prefs.getString("lastTimeDailyGoalsShown"));
     var isUploading = prefs.getBool("uploadInProgress");
@@ -313,8 +349,8 @@ class _LandingScreenState extends ResumableState<LandingScreen> {
     prefs.setBool("btBusy", false);
   }
 
-  @override
-  void onPause() {}
+  // @override
+  // void onPause() {}
 
   @override
   Widget build(BuildContext context) {
@@ -674,6 +710,80 @@ class _LandingScreenState extends ResumableState<LandingScreen> {
               ),
             ),
 
+            // ListTile(
+            //   title: Text('Upload test',
+            //       style: TextStyle(
+            //           fontFamily: "PlayfairDisplay",
+            //           fontWeight: FontWeight.bold,
+            //           color: Colors.black)),
+            //   onTap: () async {
+            //     if (Platform.isIOS) {
+            //       SharedPreferences prefs = await SharedPreferences.getInstance();
+            //       final flutterIsolate = await FlutterIsolate.spawn(isolate2, "");
+            //       final receivePort = ReceivePort();
+            //       final sendPort = receivePort.sendPort;
+            //       IsolateNameServer.registerPortWithName(sendPort, 'main');
+            //
+            //       receivePort.listen((dynamic message) async {
+            //         if (message == 'done') {
+            //           print('Killing the Isolate');
+            //           flutterIsolate.kill();
+            //           await prefs.setBool("uploadInProgress", false);
+            //           await prefs.setBool("fromIsolate", false);
+            //           // hideOverlay();
+            //         }
+            //       });
+            //     } else {
+            //       // await BLEManagerAndroid.deleteTest();
+            //     }
+            //   },
+            // ),
+            // ListTile(
+            //   title: Text('DEBUGGING ONLY: Upload LogFile',
+            //       style: TextStyle(
+            //           fontFamily: "PlayfairDisplay",
+            //           fontWeight: FontWeight.bold,
+            //           color: Colors.black)),
+            //   onTap: () async {
+            //     Upload uploader = new Upload();
+            //     await uploader.init();
+            //
+            //     Directory dir = new Directory(
+            //         (await getApplicationDocumentsDirectory()).path + "/logs/");
+            //     showOverlay(
+            //         'Die Logdatei wird zum Server übertragen.',
+            //         SpinKitFadingCircle(
+            //           color: Colors.orange,
+            //           size: 50.0,
+            //         ),
+            //         withButton: false);
+            //
+            //     await for (var entity
+            //         in dir.list(recursive: true, followLinks: true)) {
+            //       uploader.uploadLogFile(entity.path);
+            //     }
+            //
+            //     await Future.delayed(Duration(seconds: 2));
+            //     updateOverlayText("Datei erfolgreich gesendet."
+            //         "Vielen Dank");
+            //     await Future.delayed(Duration(seconds: 2));
+            //     hideOverlay();
+            //   },
+            // ),
+            // ListTile(
+            //   title: Text(
+            //     'Test Experimental BT Connector',
+            //     style: TextStyle(
+            //         fontFamily: "PlayfairDisplay",
+            //         fontWeight: FontWeight.bold,
+            //         color: Colors.black),
+            //   ),
+            //   onTap: () async {
+            //     // isolate1("");
+            //     // final flutterIsolate = await FlutterIsolate.spawn(isolate1, "");
+            //   },
+            // ),
+
             FutureBuilder(
                 future: isbctGroup(),
                 builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
@@ -817,14 +927,12 @@ class _LandingScreenState extends ResumableState<LandingScreen> {
               withButton: false);
           await prefs.setInt("recordingWillStartAt", dateTime.hour);
           await prefs.setBool("uploadInProgress", true);
-          // await prefs.setBool("fromIsolate", true);
+          await prefs.setBool("fromIsolate", true);
           final receivePort = ReceivePort();
-          int runs = 0;
-          FlutterIsolate flutterIsolate =
-              await FlutterIsolate.spawn(isolate1, "");
+          FlutterIsolate flutterMainIsolate =
+              await FlutterIsolate.spawn(mainIsolate, "");
           final sendPort = receivePort.sendPort;
           IsolateNameServer.registerPortWithName(sendPort, 'main');
-          //
           receivePort.listen((dynamic message) async {
             if (message is List) {
               hideOverlay();
@@ -839,9 +947,9 @@ class _LandingScreenState extends ResumableState<LandingScreen> {
             }
             if (message == 'cantConnect') {
               print("Connection Not Possible - Killing the Isolate.");
-              flutterIsolate.kill();
+              flutterMainIsolate.kill();
               await prefs.setBool("uploadInProgress", false);
-              // await prefs.setBool("fromIsolate", false);
+              await prefs.setBool("fromIsolate", false);
               hideOverlay();
               showOverlay(
                   "Ihre Bangle konnte nicht verbunden werden, bitte stellen Sie sicher, dass diese Betriebsbereit ist und Bluetooth aktiviert wurde.",
@@ -849,36 +957,19 @@ class _LandingScreenState extends ResumableState<LandingScreen> {
                   withButton: true);
             }
             if (message == 'connectionClosed') {
-              print(
-                  "BLE Connection closed - Killing the Isolate and spawning a new one.");
-              flutterIsolate.kill();
-              runs++;
-              if (Platform.isAndroid) {
-                if (runs <= 5) {
-                  await Future.delayed(Duration(minutes: 1));
-                  flutterIsolate = await FlutterIsolate.spawn(isolate1, "");
-                } else {
-                  await prefs.setBool("uploadInProgress", false);
-                  await prefs.setBool("fromIsolate", false);
-                  hideOverlay();
-                  showOverlay(
-                      "Wir haben die Verbindung zur Bangle verloren. Bitte stellen Sie sicher, dass diese Betriebsbereit ist, in der Nähe liegt und Bluetooth aktiviert wurde.",
-                      Icon(Icons.bluetooth, size: 30, color: Colors.blue),
-                      withButton: true);
-                }
-              } else {
-                await prefs.setBool("uploadInProgress", false);
-                await prefs.setBool("fromIsolate", false);
-                hideOverlay();
-                showOverlay(
-                    "Wir haben die Verbindung zur Bangle verloren. Bitte stellen Sie sicher, dass diese Betriebsbereit ist, in der Nähe liegt und Bluetooth aktiviert wurde.",
-                    Icon(Icons.bluetooth, size: 30, color: Colors.blue),
-                    withButton: true);
-              }
+              print("BLE Connection closed - Killing the Isolate");
+              flutterMainIsolate.kill();
+              await prefs.setBool("uploadInProgress", false);
+              await prefs.setBool("fromIsolate", false);
+              hideOverlay();
+              showOverlay(
+                  "Wir haben die Verbindung zur Bangle verloren. Bitte stellen Sie sicher, dass diese Betriebsbereit ist, in der Nähe liegt und Bluetooth aktiviert wurde.",
+                  Icon(Icons.bluetooth, size: 30, color: Colors.blue),
+                  withButton: true);
             }
             if (message == 'downloadCanceled') {
               print("Download Canceled - Killing the Isolate.");
-              flutterIsolate.kill();
+              flutterMainIsolate.kill();
               await prefs.setBool("uploadInProgress", false);
               await prefs.setBool("fromIsolate", false);
               hideOverlay();
@@ -889,9 +980,9 @@ class _LandingScreenState extends ResumableState<LandingScreen> {
             }
             if (message == 'done') {
               print('Killing the Isolate');
-              flutterIsolate.kill();
+              flutterMainIsolate.kill();
               await prefs.setBool("uploadInProgress", false);
-              // await prefs.setBool("fromIsolate", false);
+              await prefs.setBool("fromIsolate", false);
               hideOverlay();
               showOverlay(
                   "Vielen Dank, Ihre Daten wurden erfolgreich übertragen.",
@@ -900,9 +991,9 @@ class _LandingScreenState extends ResumableState<LandingScreen> {
             }
             if (message == 'doneWithError') {
               print('Killing the Isolate');
-              flutterIsolate.kill();
+              flutterMainIsolate.kill();
               await prefs.setBool("uploadInProgress", false);
-              // await prefs.setBool("fromIsolate", false);
+              await prefs.setBool("fromIsolate", false);
               hideOverlay();
               showOverlay(
                   "Ihre Bangle konnte nicht verbunden werden, bitte stellen Sie sicher, dass das Gerät betriebsbereit ist und Bluetooth aktiviert wurde.",
